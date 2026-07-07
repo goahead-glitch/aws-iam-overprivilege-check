@@ -1,0 +1,21 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "cloudshell:CreateEnvironment",
+        "cloudshell:CreateSession",
+        "cloudshell:DeleteSession",
+        "cloudshell:DescribeEnvironments",
+        "cloudshell:GetEnvironmentStatus",
+        "cloudshell:PutCredentials",
+        "cloudshell:RedeemCode",
+        "cloudshell:SendHeartBeat",
+        "cloudshell:StartEnvironment"
+      ],
+      "Resource": "*",
+      "Sid": "(no-sid)"
+    }
+  ]
+}

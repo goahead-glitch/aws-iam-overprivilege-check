@@ -1,0 +1,1134 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>IAM 최소권한 역산 리포트 — run-20260626-rightsize</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --surface2: #1c2330;
+    --border: #30363d;
+    --text: #e6edf3;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    --green: #3fb950;
+    --orange: #d29922;
+    --red: #f85149;
+    --purple: #bc8cff;
+    --blue-dim: #1f3a5f;
+    --orange-dim: #3d2f00;
+    --used-bg: #0d2618;
+    --unused-bg: #1c1c1c;
+    --blind-bg: #1d1040;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'SF Mono', 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+    font-size: 13px;
+    line-height: 1.6;
+    min-height: 100vh;
+  }
+
+  /* ─── Layout ─── */
+  .shell {
+    display: grid;
+    grid-template-columns: 240px 1fr;
+    min-height: 100vh;
+  }
+
+  /* ─── Sidebar ─── */
+  .sidebar {
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    padding: 24px 0;
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    overflow-y: auto;
+  }
+
+  .sidebar-title {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted);
+    padding: 0 20px 12px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 12px;
+  }
+
+  .sidebar-nav a {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 20px;
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 12px;
+    border-left: 2px solid transparent;
+    transition: all 0.15s;
+  }
+
+  .sidebar-nav a:hover,
+  .sidebar-nav a.active {
+    color: var(--text);
+    background: var(--surface2);
+    border-left-color: var(--accent);
+  }
+
+  .sidebar-nav .type-role { color: var(--purple); }
+  .sidebar-nav .type-user { color: var(--accent); }
+  .nav-icon { font-size: 10px; opacity: 0.6; }
+
+  /* ─── Main ─── */
+  main {
+    padding: 32px 40px 80px;
+    max-width: 1100px;
+  }
+
+  /* ─── Header ─── */
+  .report-header {
+    margin-bottom: 32px;
+    padding-bottom: 24px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .run-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 3px 12px;
+    font-size: 11px;
+    color: var(--muted);
+    margin-bottom: 14px;
+  }
+  .run-badge::before { content: '⚡'; font-size: 10px; }
+
+  h1 {
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--text);
+    letter-spacing: -0.3px;
+    margin-bottom: 12px;
+  }
+
+  .notice {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    background: var(--blue-dim);
+    border: 1px solid #264d80;
+    border-radius: 6px;
+    padding: 10px 14px;
+    color: #79c0ff;
+    font-size: 12px;
+    margin-bottom: 8px;
+  }
+
+  .warning {
+    background: var(--orange-dim);
+    border-color: #6e4c00;
+    color: #e3b341;
+  }
+
+  .notice-icon { flex-shrink: 0; margin-top: 1px; }
+
+  /* ─── Summary section ─── */
+  h2 {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text);
+    margin: 36px 0 14px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  h2 .entity-label {
+    font-family: 'SF Mono', monospace;
+    font-size: 13px;
+    color: var(--accent);
+    background: #0d2240;
+    border: 1px solid #1f4070;
+    border-radius: 4px;
+    padding: 2px 8px;
+  }
+
+  /* ─── Tables ─── */
+  .table-wrap {
+    overflow-x: auto;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin-bottom: 16px;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+  }
+
+  thead th {
+    background: var(--surface2);
+    color: var(--muted);
+    font-weight: 600;
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 9px 12px;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+
+  tbody tr {
+    border-bottom: 1px solid var(--border);
+    transition: background 0.1s;
+  }
+  tbody tr:last-child { border-bottom: none; }
+  tbody tr:hover { background: var(--surface2); }
+
+  td {
+    padding: 8px 12px;
+    color: var(--text);
+    vertical-align: middle;
+  }
+
+  td code, th code {
+    background: #1f2937;
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 1px 5px;
+    font-size: 11px;
+    color: #d2a8ff;
+  }
+
+  /* Status badges */
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    border-radius: 20px;
+    padding: 2px 8px;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+  }
+  .badge-used    { background: #0d2618; color: var(--green);  border: 1px solid #1a4028; }
+  .badge-unused  { background: #1c1c1c; color: var(--muted);  border: 1px solid #333; }
+  .badge-blind   { background: #1d1040; color: var(--purple); border: 1px solid #2d1a60; }
+
+  /* Kind badges */
+  .kind-read  { color: #79c0ff; }
+  .kind-write { color: var(--orange); }
+  .kind-blind { color: var(--purple); }
+
+  /* Number cells */
+  .num { text-align: right; font-variant-numeric: tabular-nums; }
+  .num-green { color: var(--green); font-weight: 600; }
+  .num-red   { color: var(--red);   font-weight: 600; }
+  .num-orange { color: var(--orange); font-weight: 600; }
+
+  /* ─── Observed actions cell ─── */
+  .actions-cell {
+    font-size: 11px;
+    color: var(--muted);
+    max-width: 420px;
+    line-height: 1.8;
+  }
+  .action-tag {
+    display: inline-block;
+    background: #0d2240;
+    border: 1px solid #1f4070;
+    border-radius: 3px;
+    padding: 0 5px;
+    margin: 1px 2px;
+    color: #79c0ff;
+    font-size: 10px;
+    white-space: nowrap;
+  }
+
+  /* ─── Proposal note ─── */
+  .proposal {
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
+    background: #0a1f0a;
+    border: 1px solid #1a4028;
+    border-radius: 6px;
+    padding: 10px 14px;
+    color: #56d364;
+    font-size: 12px;
+    margin-top: 4px;
+    margin-bottom: 20px;
+  }
+  .proposal code {
+    background: #0d2618;
+    border: 1px solid #1a4028;
+    color: #3fb950;
+    border-radius: 3px;
+    padding: 1px 5px;
+    font-size: 11px;
+  }
+
+  /* ─── ARN list ─── */
+  .arn-section {
+    margin: 12px 0 24px;
+  }
+  .arn-label {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--muted);
+    margin-bottom: 8px;
+  }
+  .arn-list {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 12px 16px;
+    max-height: 240px;
+    overflow-y: auto;
+  }
+  .arn-list ul {
+    list-style: none;
+    padding: 0;
+  }
+  .arn-list li {
+    font-size: 11px;
+    color: var(--muted);
+    padding: 2px 0;
+    font-family: monospace;
+    border-bottom: 1px solid #1c2330;
+    word-break: break-all;
+  }
+  .arn-list li:last-child { border-bottom: none; }
+  .arn-list li::before {
+    content: '▸ ';
+    color: #30363d;
+  }
+
+  /* ─── Summary table special ─── */
+  .summary-table td:nth-child(1) {
+    font-family: monospace;
+    color: var(--accent);
+    font-size: 12px;
+  }
+
+  /* ─── Scrollbar ─── */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: var(--surface); }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<div class="shell">
+
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="sidebar-title">엔티티 목록</div>
+    <nav class="sidebar-nav">
+      <a href="#summary">📊 &nbsp;전체 요약</a>
+      <a href="#role-spot-fleet"><span class="type-role">role</span> &nbsp;aws-ec2-spot-fleet-tagging-role</a>
+      <a href="#role-lambda"><span class="type-role">role</span> &nbsp;lamdaaaa-role-3w4ttpc4</a>
+      <a href="#user-admin"><span class="type-user">user</span> &nbsp;Admin_User</a>
+      <a href="#user-eks"><span class="type-user">user</span> &nbsp;eks</a>
+      <a href="#user-infra"><span class="type-user">user</span> &nbsp;infra</a>
+      <a href="#user-k8s"><span class="type-user">user</span> &nbsp;k8s</a>
+      <a href="#user-sec-scan"><span class="type-user">user</span> &nbsp;sec-scan</a>
+    </nav>
+  </aside>
+
+  <!-- Main content -->
+  <main>
+
+    <!-- Header -->
+    <div class="report-header">
+      <div class="run-badge">run-20260626-rightsize</div>
+      <h1>IAM 최소권한 역산 리포트</h1>
+
+      <div class="notice">
+        <span class="notice-icon">ℹ</span>
+        <span>CloudTrail 실사용 이력(lookup-events)으로 부여 권한을 역산. 모두 읽기 전용 분석이며, <strong>제거·치환은 제안일 뿐 실제 변경은 사람이 검토 후 수행</strong>한다.</span>
+      </div>
+      <div class="notice warning" style="margin-top:8px;">
+        <span class="notice-icon">⚠</span>
+        <span>조회창이 짧으면 저빈도 정당 권한이 '미관측'으로 보일 수 있다. 특히 read(Get/List/Describe), <code>iam:PassRole</code>(소비 서비스 이벤트에 묻힘), S3 데이터이벤트는 누락되기 쉬움.</span>
+      </div>
+    </div>
+
+    <!-- ══════════════════════════════════ SUMMARY ══════════════════════════════════ -->
+    <h2 id="summary">📊 요약</h2>
+    <div class="table-wrap">
+      <table class="summary-table">
+        <thead>
+          <tr>
+            <th>엔티티</th>
+            <th class="num">실사용 액션</th>
+            <th class="num">부여 패턴</th>
+            <th class="num">사용</th>
+            <th class="num">미관측(제거후보)</th>
+            <th class="num">관측 ARN</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>role:aws-ec2-spot-fleet-tagging-role</td>
+            <td class="num">3</td>
+            <td class="num">10</td>
+            <td class="num num-green">3</td>
+            <td class="num num-orange">6</td>
+            <td class="num">0</td>
+          </tr>
+          <tr>
+            <td>role:lamdaaaa-role-3w4ttpc4</td>
+            <td class="num">0</td>
+            <td class="num">3</td>
+            <td class="num">0</td>
+            <td class="num num-red">3</td>
+            <td class="num">0</td>
+          </tr>
+          <tr>
+            <td>user:Admin_User</td>
+            <td class="num">24</td>
+            <td class="num">1</td>
+            <td class="num num-green">1</td>
+            <td class="num">0</td>
+            <td class="num">0</td>
+          </tr>
+          <tr>
+            <td>user:eks</td>
+            <td class="num">2</td>
+            <td class="num">1</td>
+            <td class="num num-green">1</td>
+            <td class="num">0</td>
+            <td class="num">0</td>
+          </tr>
+          <tr>
+            <td>user:infra</td>
+            <td class="num">166</td>
+            <td class="num">12</td>
+            <td class="num num-green">1</td>
+            <td class="num num-red">11</td>
+            <td class="num">446</td>
+          </tr>
+          <tr>
+            <td>user:k8s</td>
+            <td class="num">25</td>
+            <td class="num">2</td>
+            <td class="num">0</td>
+            <td class="num num-red">2</td>
+            <td class="num">1</td>
+          </tr>
+          <tr>
+            <td>user:sec-scan</td>
+            <td class="num">0</td>
+            <td class="num">15</td>
+            <td class="num">0</td>
+            <td class="num num-red">15</td>
+            <td class="num">0</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- ══════════════════════════════════ SPOT FLEET ══════════════════════════════════ -->
+    <h2 id="role-spot-fleet"><span class="entity-label">role</span> aws-ec2-spot-fleet-tagging-role</h2>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>정책</th>
+            <th>유형</th>
+            <th>Sid</th>
+            <th>부여 패턴</th>
+            <th>종류</th>
+            <th>상태</th>
+            <th>실관측 액션</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>AmazonEC2SpotFleetTaggingRole</td>
+            <td>managed</td>
+            <td>(no-sid)</td>
+            <td><code>ec2:DescribeImages</code></td>
+            <td><span class="kind-read">🔵 read</span></td>
+            <td><span class="badge badge-used">✅ 사용</span></td>
+            <td><span class="action-tag">ec2:DescribeImages</span></td>
+          </tr>
+          <tr>
+            <td>AmazonEC2SpotFleetTaggingRole</td>
+            <td>managed</td>
+            <td>(no-sid)</td>
+            <td><code>ec2:DescribeSubnets</code></td>
+            <td><span class="kind-read">🔵 read</span></td>
+            <td><span class="badge badge-used">✅ 사용</span></td>
+            <td><span class="action-tag">ec2:DescribeSubnets</span></td>
+          </tr>
+          <tr>
+            <td>AmazonEC2SpotFleetTaggingRole</td>
+            <td>managed</td>
+            <td>(no-sid)</td>
+            <td><code>ec2:RequestSpotInstances</code></td>
+            <td><span class="kind-write">🟠 write</span></td>
+            <td><span class="badge badge-unused">⬜ 미관측</span></td>
+            <td>—</td>
+          </tr>
+          <tr>
+            <td>AmazonEC2SpotFleetTaggingRole</td>
+            <td>managed</td>
+            <td>(no-sid)</td>
+            <td><code>ec2:TerminateInstances</code></td>
+            <td><span class="kind-write">🟠 write</span></td>
+            <td><span class="badge badge-unused">⬜ 미관측</span></td>
+            <td>—</td>
+          </tr>
+          <tr>
+            <td>AmazonEC2SpotFleetTaggingRole</td>
+            <td>managed</td>
+            <td>(no-sid)</td>
+            <td><code>ec2:DescribeInstanceStatus</code></td>
+            <td><span class="kind-read">🔵 read</span></td>
+            <td><span class="badge badge-used">✅ 사용</span></td>
+            <td><span class="action-tag">ec2:DescribeInstanceStatus</span></td>
+          </tr>
+          <tr>
+            <td>AmazonEC2SpotFleetTaggingRole</td>
+            <td>managed</td>
+            <td>(no-sid)</td>
+            <td><code>ec2:CreateTags</code></td>
+            <td><span class="kind-write">🟠 write</span></td>
+            <td><span class="badge badge-unused">⬜ 미관측</span></td>
+            <td>—</td>
+          </tr>
+          <tr>
+            <td>AmazonEC2SpotFleetTaggingRole</td>
+            <td>managed</td>
+            <td>(no-sid)</td>
+            <td><code>ec2:RunInstances</code></td>
+            <td><span class="kind-write">🟠 write</span></td>
+            <td><span class="badge badge-unused">⬜ 미관측</span></td>
+            <td>—</td>
+          </tr>
+          <tr>
+            <td>AmazonEC2SpotFleetTaggingRole</td>
+            <td>managed</td>
+            <td>(no-sid)</td>
+            <td><code>iam:PassRole</code></td>
+            <td><span class="kind-blind">🟣 blind</span></td>
+            <td><span class="badge badge-blind">🟣 미관측·보존</span></td>
+            <td>—</td>
+          </tr>
+          <tr>
+            <td>AmazonEC2SpotFleetTaggingRole</td>
+            <td>managed</td>
+            <td>(no-sid)</td>
+            <td><code>elasticloadbalancing:RegisterInstancesWithLoadBalancer</code></td>
+            <td><span class="kind-write">🟠 write</span></td>
+            <td><span class="badge badge-unused">⬜ 미관측</span></td>
+            <td>—</td>
+          </tr>
+          <tr>
+            <td>AmazonEC2SpotFleetTaggingRole</td>
+            <td>managed</td>
+            <td>(no-sid)</td>
+            <td><code>elasticloadbalancing:RegisterTargets</code></td>
+            <td><span class="kind-write">🟠 write</span></td>
+            <td><span class="badge badge-unused">⬜ 미관측</span></td>
+            <td>—</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="proposal">
+      📄 <span><strong>제안 최소권한 정책:</strong> ✅만 남기고 와일드카드 <code>Resource:*</code>는 관측 ARN으로 좁힌 <code>role-aws-ec2-spot-fleet-tagging-role-rightsized-policy.json</code> 참조.</span>
+    </div>
+
+    <!-- ══════════════════════════════════ LAMBDA ══════════════════════════════════ -->
+    <h2 id="role-lambda"><span class="entity-label">role</span> lamdaaaa-role-3w4ttpc4</h2>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>정책</th>
+            <th>유형</th>
+            <th>Sid</th>
+            <th>부여 패턴</th>
+            <th>종류</th>
+            <th>상태</th>
+            <th>실관측 액션</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td style="font-size:10px;">AWSLambdaBasicExecutionRole-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx</td>
+            <td>managed</td>
+            <td>(no-sid)</td>
+            <td><code>logs:CreateLogGroup</code></td>
+            <td><span class="kind-write">🟠 write</span></td>
+            <td><span class="badge badge-unused">⬜ 미관측</span></td>
+            <td>—</td>
+          </tr>
+          <tr>
+            <td style="font-size:10px;">AWSLambdaBasicExecutionRole-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx</td>
+            <td>managed</td>
+            <td>(no-sid)</td>
+            <td><code>logs:CreateLogStream</code></td>
+            <td><span class="kind-write">🟠 write</span></td>
+            <td><span class="badge badge-unused">⬜ 미관측</span></td>
+            <td>—</td>
+          </tr>
+          <tr>
+            <td style="font-size:10px;">AWSLambdaBasicExecutionRole-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx</td>
+            <td>managed</td>
+            <td>(no-sid)</td>
+            <td><code>logs:PutLogEvents</code></td>
+            <td><span class="kind-write">🟠 write</span></td>
+            <td><span class="badge badge-unused">⬜ 미관측</span></td>
+            <td>—</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="proposal">
+      📄 <span><strong>제안 최소권한 정책:</strong> ✅만 남기고 와일드카드 <code>Resource:*</code>는 관측 ARN으로 좁힌 <code>role-lamdaaaa-role-3w4ttpc4-rightsized-policy.json</code> 참조.</span>
+    </div>
+
+    <!-- ══════════════════════════════════ ADMIN_USER ══════════════════════════════════ -->
+    <h2 id="user-admin"><span class="entity-label">user</span> Admin_User</h2>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>정책</th>
+            <th>유형</th>
+            <th>Sid</th>
+            <th>부여 패턴</th>
+            <th>종류</th>
+            <th>상태</th>
+            <th>실관측 액션</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>AdministratorAccess</td>
+            <td>managed</td>
+            <td>(no-sid)</td>
+            <td><code>*</code></td>
+            <td><span class="kind-write">🟠 write</span></td>
+            <td><span class="badge badge-used">✅ 사용</span></td>
+            <td class="actions-cell">
+              <span class="action-tag">autoscaling:DescribeAutoScalingGroups</span>
+              <span class="action-tag">cloudwatch:DescribeAlarms</span>
+              <span class="action-tag">ec2:DescribeAccountAttributes</span>
+              <span class="action-tag">ec2:DescribeAddresses</span>
+              <span class="action-tag">ec2:DescribeAvailabilityZones</span>
+              <span class="action-tag">ec2:DescribeCapacityReservations</span>
+              <span class="action-tag">ec2:DescribeHosts</span>
+              <span class="action-tag">ec2:DescribeInstanceStatus</span>
+              <span class="action-tag">ec2:DescribeInstances</span>
+              <span class="action-tag">ec2:DescribeKeyPairs</span>
+              <span class="action-tag">ec2:DescribeLaunchTemplates</span>
+              <span class="action-tag">ec2:DescribeManagedPrefixLists</span>
+              <span class="action-tag">ec2:DescribePlacementGroups</span>
+              <span class="action-tag">ec2:DescribeRegions</span>
+              <span class="action-tag">ec2:DescribeSecurityGroups</span>
+              <span class="action-tag">ec2:DescribeSnapshots</span>
+              <span class="action-tag">ec2:DescribeTags</span>
+              <span class="action-tag">ec2:DescribeVolumeStatus</span>
+              <span class="action-tag">ec2:DescribeVolumes</span>
+              <span class="action-tag">ec2:DescribeVpcs</span>
+              <span class="action-tag">elasticloadbalancing:DescribeLoadBalancers</span>
+              <span class="action-tag">notifications:ListNotificationHubs</span>
+              <span class="action-tag">signin:CheckMfa</span>
+              <span class="action-tag">signin:ConsoleLogin</span>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="proposal">
+      📄 <span><strong>제안 최소권한 정책:</strong> ✅만 남기고 와일드카드 <code>Resource:*</code>는 관측 ARN으로 좁힌 <code>user-Admin_User-rightsized-policy.json</code> 참조.</span>
+    </div>
+
+    <!-- ══════════════════════════════════ USER:EKS ══════════════════════════════════ -->
+    <h2 id="user-eks"><span class="entity-label">user</span> eks</h2>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>정책</th>
+            <th>유형</th>
+            <th>Sid</th>
+            <th>부여 패턴</th>
+            <th>종류</th>
+            <th>상태</th>
+            <th>실관측 액션</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>AdministratorAccess</td>
+            <td>managed</td>
+            <td>(no-sid)</td>
+            <td><code>*</code></td>
+            <td><span class="kind-write">🟠 write</span></td>
+            <td><span class="badge badge-used">✅ 사용</span></td>
+            <td class="actions-cell">
+              <span class="action-tag">eks:DescribeCluster</span>
+              <span class="action-tag">sts:GetCallerIdentity</span>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="proposal">
+      📄 <span><strong>제안 최소권한 정책:</strong> ✅만 남기고 와일드카드 <code>Resource:*</code>는 관측 ARN으로 좁힌 <code>user-eks-rightsized-policy.json</code> 참조.</span>
+    </div>
+
+    <!-- ══════════════════════════════════ USER:INFRA ══════════════════════════════════ -->
+    <h2 id="user-infra"><span class="entity-label">user</span> infra</h2>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>정책</th>
+            <th>유형</th>
+            <th>Sid</th>
+            <th>부여 패턴</th>
+            <th>종류</th>
+            <th>상태</th>
+            <th>실관측 액션</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>IAMFullAccess</td>
+            <td>managed</td>
+            <td>(no-sid)</td>
+            <td><code>iam:*</code></td>
+            <td><span class="kind-write">🟠 write</span></td>
+            <td><span class="badge badge-unused">⬜ 미관측</span></td>
+            <td>—</td>
+          </tr>
+          <tr>
+            <td>IAMFullAccess</td>
+            <td>managed</td>
+            <td>(no-sid)</td>
+            <td><code>organizations:DescribeAccount</code></td>
+            <td><span class="kind-read">🔵 read</span></td>
+            <td><span class="badge badge-unused">⬜ 미관측</span></td>
+            <td>—</td>
+          </tr>
+          <tr>
+            <td>IAMFullAccess</td>
+            <td>managed</td>
+            <td>(no-sid)</td>
+            <td><code>organizations:DescribeOrganization</code></td>
+            <td><span class="kind-read">🔵 read</span></td>
+            <td><span class="badge badge-unused">⬜ 미관측</span></td>
+            <td>—</td>
+          </tr>
+          <tr>
+            <td>IAMFullAccess</td>
+            <td>managed</td>
+            <td>(no-sid)</td>
+            <td><code>organizations:DescribeOrganizationalUnit</code></td>
+            <td><span class="kind-read">🔵 read</span></td>
+            <td><span class="badge badge-unused">⬜ 미관측</span></td>
+            <td>—</td>
+          </tr>
+          <tr>
+            <td>IAMFullAccess</td>
+            <td>managed</td>
+            <td>(no-sid)</td>
+            <td><code>organizations:DescribePolicy</code></td>
+            <td><span class="kind-read">🔵 read</span></td>
+            <td><span class="badge badge-unused">⬜ 미관측</span></td>
+            <td>—</td>
+          </tr>
+          <tr>
+            <td>IAMFullAccess</td>
+            <td>managed</td>
+            <td>(no-sid)</td>
+            <td><code>organizations:ListChildren</code></td>
+            <td><span class="kind-read">🔵 read</span></td>
+            <td><span class="badge badge-unused">⬜ 미관측</span></td>
+            <td>—</td>
+          </tr>
+          <tr>
+            <td>IAMFullAccess</td>
+            <td>managed</td>
+            <td>(no-sid)</td>
+            <td><code>organizations:ListParents</code></td>
+            <td><span class="kind-read">🔵 read</span></td>
+            <td><span class="badge badge-unused">⬜ 미관측</span></td>
+            <td>—</td>
+          </tr>
+          <tr>
+            <td>IAMFullAccess</td>
+            <td>managed</td>
+            <td>(no-sid)</td>
+            <td><code>organizations:ListPoliciesForTarget</code></td>
+            <td><span class="kind-read">🔵 read</span></td>
+            <td><span class="badge badge-unused">⬜ 미관측</span></td>
+            <td>—</td>
+          </tr>
+          <tr>
+            <td>IAMFullAccess</td>
+            <td>managed</td>
+            <td>(no-sid)</td>
+            <td><code>organizations:ListRoots</code></td>
+            <td><span class="kind-read">🔵 read</span></td>
+            <td><span class="badge badge-unused">⬜ 미관측</span></td>
+            <td>—</td>
+          </tr>
+          <tr>
+            <td>IAMFullAccess</td>
+            <td>managed</td>
+            <td>(no-sid)</td>
+            <td><code>organizations:ListPolicies</code></td>
+            <td><span class="kind-read">🔵 read</span></td>
+            <td><span class="badge badge-unused">⬜ 미관측</span></td>
+            <td>—</td>
+          </tr>
+          <tr>
+            <td>IAMFullAccess</td>
+            <td>managed</td>
+            <td>(no-sid)</td>
+            <td><code>organizations:ListTargetsForPolicy</code></td>
+            <td><span class="kind-read">🔵 read</span></td>
+            <td><span class="badge badge-unused">⬜ 미관측</span></td>
+            <td>—</td>
+          </tr>
+          <tr>
+            <td>AWSCloudShellFullAccess</td>
+            <td>managed</td>
+            <td>(no-sid)</td>
+            <td><code>cloudshell:*</code></td>
+            <td><span class="kind-write">🟠 write</span></td>
+            <td><span class="badge badge-used">✅ 사용</span></td>
+            <td class="actions-cell">
+              <span class="action-tag">cloudshell:CreateEnvironment</span>
+              <span class="action-tag">cloudshell:CreateSession</span>
+              <span class="action-tag">cloudshell:DeleteSession</span>
+              <span class="action-tag">cloudshell:DescribeEnvironments</span>
+              <span class="action-tag">cloudshell:GetEnvironmentStatus</span>
+              <span class="action-tag">cloudshell:PutCredentials</span>
+              <span class="action-tag">cloudshell:RedeemCode</span>
+              <span class="action-tag">cloudshell:SendHeartBeat</span>
+              <span class="action-tag">cloudshell:StartEnvironment</span>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="proposal">
+      📄 <span><strong>제안 최소권한 정책:</strong> ✅만 남기고 와일드카드 <code>Resource:*</code>는 관측 ARN으로 좁힌 <code>user-infra-rightsized-policy.json</code> 참조.</span>
+    </div>
+
+    <div class="arn-section">
+      <div class="arn-label">관측 리소스 ARN (446개)</div>
+      <div class="arn-list">
+        <ul id="infra-arn-list">
+          <li>arn:aws:ec2:ap-northeast-2:111122223333:security-group-rule/sgr-xxxxxxxxxxxxxxxxx</li>
+          <li>arn:aws:ec2:ap-northeast-2:111122223333:security-group-rule/sgr-xxxxxxxxxxxxxxxxx</li>
+          <li>arn:aws:ec2:ap-northeast-2:111122223333:security-group-rule/sgr-xxxxxxxxxxxxxxxxx</li>
+          <li>arn:aws:ec2:ap-northeast-2:111122223333:security-group-rule/sgr-xxxxxxxxxxxxxxxxx</li>
+          <li>arn:aws:ec2:ap-northeast-2:111122223333:security-group-rule/sgr-xxxxxxxxxxxxxxxxx</li>
+          <li>arn:aws:ec2:ap-northeast-2:111122223333:security-group-rule/sgr-xxxxxxxxxxxxxxxxx</li>
+          <li>arn:aws:ec2:ap-northeast-2:111122223333:security-group-rule/sgr-xxxxxxxxxxxxxxxxx</li>
+          <li>arn:aws:ec2:ap-northeast-2:111122223333:security-group-rule/sgr-xxxxxxxxxxxxxxxxx</li>
+          <li>arn:aws:ec2:ap-northeast-2:111122223333:security-group-rule/sgr-xxxxxxxxxxxxxxxxx</li>
+          <li>arn:aws:ec2:ap-northeast-2:111122223333:security-group-rule/sgr-xxxxxxxxxxxxxxxxx</li>
+          <li>arn:aws:ec2:ap-northeast-2:111122223333:security-group-rule/sgr-xxxxxxxxxxxxxxxxx</li>
+          <li>arn:aws:ec2:ap-northeast-2:111122223333:security-group-rule/sgr-xxxxxxxxxxxxxxxxx</li>
+          <li>arn:aws:ec2:ap-northeast-2:111122223333:security-group-rule/sgr-xxxxxxxxxxxxxxxxx</li>
+          <li>arn:aws:ec2:ap-northeast-2:111122223333:security-group-rule/sgr-xxxxxxxxxxxxxxxxx</li>
+          <li>arn:aws:ec2:ap-northeast-2:111122223333:security-group-rule/sgr-xxxxxxxxxxxxxxxxx</li>
+          <li>arn:aws:ec2:ap-northeast-2:111122223333:security-group-rule/sgr-xxxxxxxxxxxxxxxxx</li>
+          <li>arn:aws:ec2:ap-northeast-2:111122223333:security-group-rule/sgr-xxxxxxxxxxxxxxxxx</li>
+          <li>arn:aws:ec2:ap-northeast-2:111122223333:security-group-rule/sgr-xxxxxxxxxxxxxxxxx</li>
+          <li>arn:aws:ec2:ap-northeast-2:111122223333:security-group-rule/sgr-xxxxxxxxxxxxxxxxx</li>
+          <li>arn:aws:ec2:ap-northeast-2:111122223333:security-group-rule/sgr-xxxxxxxxxxxxxxxxx</li>
+          <li>arn:aws:ec2:ap-northeast-2:111122223333:security-group/sg-xxxxxxxxxxxxxxxxx</li>
+          <li>arn:aws:ec2:ap-northeast-2:111122223333:security-group/sg-xxxxxxxxxxxxxxxxx</li>
+          <li>arn:aws:ec2:ap-northeast-2:111122223333:security-group/sg-xxxxxxxxxxxxxxxxx</li>
+          <li>arn:aws:ec2:ap-northeast-2:111122223333:subnet/subnet-xxxxxxxxxxxxxxxxx</li>
+          <li>arn:aws:ec2:ap-northeast-2:111122223333:subnet/subnet-xxxxxxxxxxxxxxxxx</li>
+          <li>arn:aws:ec2:ap-northeast-2:111122223333:subnet/subnet-xxxxxxxxxxxxxxxxx</li>
+          <li>arn:aws:ecr:ap-northeast-2:111122223333:repository/app-api</li>
+          <li>arn:aws:ecr:ap-northeast-2:111122223333:repository/app-frontend</li>
+          <li>arn:aws:ecr:ap-northeast-2:111122223333:repository/app-inventory</li>
+          <li>arn:aws:ecr:ap-northeast-2:111122223333:repository/app-order</li>
+          <li>arn:aws:ecr:ap-northeast-2:111122223333:repository/app-payment</li>
+          <li>arn:aws:ecr:ap-northeast-2:111122223333:repository/app-product</li>
+          <li>arn:aws:ecr:ap-northeast-2:111122223333:repository/app-user</li>
+          <li>arn:aws:ecs:ap-northeast-2:111122223333:cluster/app-db-migration</li>
+          <li>arn:aws:ecs:ap-northeast-2:111122223333:task-definition/app-db-migration:1</li>
+          <li>arn:aws:ecs:ap-northeast-2:111122223333:task-definition/app-db-migration:2</li>
+          <li>arn:aws:eks:ap-northeast-2:111122223333:cluster/app-eks</li>
+          <li>arn:aws:eks:ap-northeast-2:111122223333:nodegroup/app-eks/api-node-group/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx</li>
+          <li>arn:aws:eks:ap-northeast-2:111122223333:nodegroup/app-eks/ops-node-group/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx</li>
+          <li>arn:aws:eks:ap-northeast-2:111122223333:nodegroup/app-eks/service-node-group/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx</li>
+          <li>arn:aws:iam::111122223333:role/app-db-migration-execution-role</li>
+          <li>arn:aws:iam::111122223333:role/app-eks-cluster-role</li>
+          <li>arn:aws:iam::111122223333:role/app-eks-karpenter-node</li>
+          <li>arn:aws:iam::111122223333:role/app-eks-worker-role</li>
+          <li>arn:aws:iam::111122223333:role/argocd-role</li>
+          <li>arn:aws:iam::111122223333:user/cicd</li>
+          <li>arn:aws:iam::111122223333:user/infra</li>
+          <li>arn:aws:iam::111122223333:user/k8s</li>
+          <li>arn:aws:rds:ap-northeast-2:111122223333:db:postgre</li>
+          <li>arn:aws:rds:ap-northeast-2:111122223333:pg:app-postgres-parameter</li>
+          <li>arn:aws:rds:ap-northeast-2:111122223333:subgrp:app-db-subnet-group</li>
+          <li>arn:aws:sts::111122223333:assumed-role/argocd-role/{{SessionName}}</li>
+          <li style="color:#555;font-style:italic;">… 외 395개 ARN (전체 목록은 원본 리포트 참조)</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- ══════════════════════════════════ USER:K8S ══════════════════════════════════ -->
+    <h2 id="user-k8s"><span class="entity-label">user</span> k8s</h2>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>정책</th>
+            <th>유형</th>
+            <th>Sid</th>
+            <th>부여 패턴</th>
+            <th>종류</th>
+            <th>상태</th>
+            <th>실관측 액션</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>IAMUserChangePassword</td>
+            <td>managed</td>
+            <td>(no-sid)</td>
+            <td><code>iam:ChangePassword</code></td>
+            <td><span class="kind-write">🟠 write</span></td>
+            <td><span class="badge badge-unused">⬜ 미관측</span></td>
+            <td>—</td>
+          </tr>
+          <tr>
+            <td>IAMUserChangePassword</td>
+            <td>managed</td>
+            <td>(no-sid)</td>
+            <td><code>iam:GetAccountPasswordPolicy</code></td>
+            <td><span class="kind-read">🔵 read</span></td>
+            <td><span class="badge badge-unused">⬜ 미관측</span></td>
+            <td>—</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="proposal">
+      📄 <span><strong>제안 최소권한 정책:</strong> ✅만 남기고 와일드카드 <code>Resource:*</code>는 관측 ARN으로 좁힌 <code>user-k8s-rightsized-policy.json</code> 참조.</span>
+    </div>
+
+    <div class="arn-section">
+      <div class="arn-label">관측 리소스 ARN</div>
+      <div class="arn-list">
+        <ul>
+          <li>arn:aws:ecr:ap-northeast-2:111122223333:repository/app-frontend</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- ══════════════════════════════════ USER:SEC-SCAN ══════════════════════════════════ -->
+    <h2 id="user-sec-scan"><span class="entity-label">user</span> sec-scan</h2>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>정책</th>
+            <th>유형</th>
+            <th>Sid</th>
+            <th>부여 패턴</th>
+            <th>종류</th>
+            <th>상태</th>
+            <th>실관측 액션</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>SecScanReadOnly</td>
+            <td>managed</td>
+            <td>IamReadInventory</td>
+            <td><code>iam:ListUsers</code></td>
+            <td><span class="kind-read">🔵 read</span></td>
+            <td><span class="badge badge-unused">⬜ 미관측</span></td>
+            <td>—</td>
+          </tr>
+          <tr>
+            <td>SecScanReadOnly</td>
+            <td>managed</td>
+            <td>IamReadInventory</td>
+            <td><code>iam:ListRoles</code></td>
+            <td><span class="kind-read">🔵 read</span></td>
+            <td><span class="badge badge-unused">⬜ 미관측</span></td>
+            <td>—</td>
+          </tr>
+          <tr>
+            <td>SecScanReadOnly</td>
+            <td>managed</td>
+            <td>IamReadInventory</td>
+            <td><code>iam:ListUserPolicies</code></td>
+            <td><span class="kind-read">🔵 read</span></td>
+            <td><span class="badge badge-unused">⬜ 미관측</span></td>
+            <td>—</td>
+          </tr>
+          <tr>
+            <td>SecScanReadOnly</td>
+            <td>managed</td>
+            <td>IamReadInventory</td>
+            <td><code>iam:GetUserPolicy</code></td>
+            <td><span class="kind-read">🔵 read</span></td>
+            <td><span class="badge badge-unused">⬜ 미관측</span></td>
+            <td>—</td>
+          </tr>
+          <tr>
+            <td>SecScanReadOnly</td>
+            <td>managed</td>
+            <td>IamReadInventory</td>
+            <td><code>iam:ListAttachedUserPolicies</code></td>
+            <td><span class="kind-read">🔵 read</span></td>
+            <td><span class="badge badge-unused">⬜ 미관측</span></td>
+            <td>—</td>
+          </tr>
+          <tr>
+            <td>SecScanReadOnly</td>
+            <td>managed</td>
+            <td>IamReadInventory</td>
+            <td><code>iam:ListRolePolicies</code></td>
+            <td><span class="kind-read">🔵 read</span></td>
+            <td><span class="badge badge-unused">⬜ 미관측</span></td>
+            <td>—</td>
+          </tr>
+          <tr>
+            <td>SecScanReadOnly</td>
+            <td>managed</td>
+            <td>IamReadInventory</td>
+            <td><code>iam:GetRolePolicy</code></td>
+            <td><span class="kind-read">🔵 read</span></td>
+            <td><span class="badge badge-unused">⬜ 미관측</span></td>
+            <td>—</td>
+          </tr>
+          <tr>
+            <td>SecScanReadOnly</td>
+            <td>managed</td>
+            <td>IamReadInventory</td>
+            <td><code>iam:ListAttachedRolePolicies</code></td>
+            <td><span class="kind-read">🔵 read</span></td>
+            <td><span class="badge badge-unused">⬜ 미관측</span></td>
+            <td>—</td>
+          </tr>
+          <tr>
+            <td>SecScanReadOnly</td>
+            <td>managed</td>
+            <td>IamReadInventory</td>
+            <td><code>iam:GetPolicy</code></td>
+            <td><span class="kind-read">🔵 read</span></td>
+            <td><span class="badge badge-unused">⬜ 미관측</span></td>
+            <td>—</td>
+          </tr>
+          <tr>
+            <td>SecScanReadOnly</td>
+            <td>managed</td>
+            <td>IamReadInventory</td>
+            <td><code>iam:GetPolicyVersion</code></td>
+            <td><span class="kind-read">🔵 read</span></td>
+            <td><span class="badge badge-unused">⬜ 미관측</span></td>
+            <td>—</td>
+          </tr>
+          <tr>
+            <td>SecScanReadOnly</td>
+            <td>managed</td>
+            <td>IamReadInventory</td>
+            <td><code>iam:ListEntitiesForPolicy</code></td>
+            <td><span class="kind-read">🔵 read</span></td>
+            <td><span class="badge badge-unused">⬜ 미관측</span></td>
+            <td>—</td>
+          </tr>
+          <tr>
+            <td>SecScanReadOnly</td>
+            <td>managed</td>
+            <td>IamReadInventory</td>
+            <td><code>iam:GenerateCredentialReport</code></td>
+            <td><span class="kind-write">🟠 write</span></td>
+            <td><span class="badge badge-unused">⬜ 미관측</span></td>
+            <td>—</td>
+          </tr>
+          <tr>
+            <td>SecScanReadOnly</td>
+            <td>managed</td>
+            <td>IamReadInventory</td>
+            <td><code>iam:GetCredentialReport</code></td>
+            <td><span class="kind-read">🔵 read</span></td>
+            <td><span class="badge badge-unused">⬜ 미관측</span></td>
+            <td>—</td>
+          </tr>
+          <tr>
+            <td>SecScanReadOnly</td>
+            <td>managed</td>
+            <td>CloudTrailLookup</td>
+            <td><code>cloudtrail:LookupEvents</code></td>
+            <td><span class="kind-read">🔵 read</span></td>
+            <td><span class="badge badge-unused">⬜ 미관측</span></td>
+            <td>—</td>
+          </tr>
+          <tr>
+            <td>SecScanReadOnly</td>
+            <td>managed</td>
+            <td>WhoAmI</td>
+            <td><code>sts:GetCallerIdentity</code></td>
+            <td><span class="kind-read">🔵 read</span></td>
+            <td><span class="badge badge-unused">⬜ 미관측</span></td>
+            <td>—</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="proposal">
+      📄 <span><strong>제안 최소권한 정책:</strong> ✅만 남기고 와일드카드 <code>Resource:*</code>는 관측 ARN으로 좁힌 <code>user-sec-scan-rightsized-policy.json</code> 참조.</span>
+    </div>
+
+  </main>
+</div>
+
+<script>
+  // Sidebar active link highlight on scroll
+  const sections = document.querySelectorAll('h2[id]');
+  const navLinks = document.querySelectorAll('.sidebar-nav a');
+
+  const observer = new IntersectionObserver(entries => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        navLinks.forEach(a => a.classList.remove('active'));
+        const active = document.querySelector(`.sidebar-nav a[href="#${entry.target.id}"]`);
+        if (active) active.classList.add('active');
+      }
+    });
+  }, { rootMargin: '-20% 0px -70% 0px' });
+
+  sections.forEach(s => observer.observe(s));
+</script>
+</body>
+</html>
