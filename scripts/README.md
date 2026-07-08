@@ -61,7 +61,7 @@ python3 scripts/analyze_iam_rightsize.py iam-out/${RUN_ID} iam-over ${RUN_ID}
 
 ## 4. 한국어 해석 (오프라인 캐시, Bedrock 없이)
 
-`analyze_iam_overperm.py`는 내부적으로 `interpret.py` + `report.py`를 호출해 finding에 한국어 설명을 붙인다. 기본값은 `--bedrock` 플래그 없이 실행되며, 이 경우 `cache_seed.json`에 미리 채워둔 시드만 사용한다 — Bedrock을 실제로 호출하지 않는다. Bedrock 실호출로 전환하려면 `--bedrock` 플래그를 추가하고 `bedrock:InvokeModel` 권한과 모델 접근이 필요하다(설계만, 미검증).
+`analyze_iam_overperm.py`는 내부적으로 `interpret.py` + `report.py`를 호출해 finding에 한국어 설명을 붙인다. `cache_seed.json`에 사람이 미리 채워둔 시드만 사용하며, Bedrock은 호출하지 않는다. 캐시에 없는 check_id는 "(미해석)"으로 표시된다. Bedrock 연동은 `docs/architecture.md`에 설계로만 기록되어 있고 구현하지 않았다.
 
 ## 주의(역산 한계 — 자동 삭제 금지)
 - 조회창이 짧으면(위 예시는 7일) 저빈도 정당 권한(월간 잡 등)이 '미관측'으로 보일 수 있음 → 제거 전 확인.

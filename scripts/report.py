@@ -1,6 +1,6 @@
 """
 리포트: 해석된 레코드 → 요약 + finding별 위험도·조치 표 (MD / HTML).
-환경 구분은 VPC 기준(05 문서). 산출물 형식은 04_실행계획.md §3.
+환경 구분은 VPC 기준을 그대로 쓴다.
 """
 from __future__ import annotations
 import html
