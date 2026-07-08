@@ -138,7 +138,7 @@ def main():
     recs = (from_policies(os.path.join(d, "policies-all.json"), run_id)
             + from_admin(os.path.join(d, "admin-entities.json"), run_id)
             + from_credreport(os.path.join(d, "credential-report.csv"), run_id))
-    interp, stats = interpret(recs, use_bedrock="--bedrock" in sys.argv)
+    interp, stats = interpret(recs)
     out = os.path.join("reports", run_id); os.makedirs(out, exist_ok=True)
     json.dump(interp, open(os.path.join(out, "normalized.json"), "w"), ensure_ascii=False, indent=2)
     open(os.path.join(out, "report.md"), "w").write(render_markdown(interp, run_id))
